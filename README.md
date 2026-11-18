@@ -9,7 +9,7 @@
 | 1 | | | Veri seti tanıtımı + özellik mühendisliği/seçimi | SVM |
 | 2 | | | Keşif analizi ve grafikler | XGBoost |
 | 3 | | | Ön işleme ve ortak pipeline | Lojistik Regresyon |
-| 4 | | | Açıklanabilir yapay zeka (SHAP) | Random Forest |
+| 4 | Zeynep Baran | B231210029 | Açıklanabilir yapay zeka (SHAP) | Random Forest |
 | 5 | | | Dengeleme (SMOTE) + karşılaştırma ve sonuç | KNN |
 
 ## Klasörler
@@ -25,7 +25,6 @@
 - Her yerde `random_state=42`.
 - Test oranı: %20, `stratify=y`.
 - Test seti sadece en sonda, bir kez kullanılır. Hiperparametreler cross validation ile seçilir.
-- Kimse başkasının notebook'unu değiştirip kaydetmez.
 
 ## Colab'de çalışma
 

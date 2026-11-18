@@ -10,21 +10,38 @@ import pandas as pd
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
 from sklearn.model_selection import train_test_split
+from pathlib import Path
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
-HEDEF_SUTUN = "HEDEF_SUTUN_ADI"  # TODO: veri seti secilince doldurulacak
+HEDEF_SUTUN = "y" 
 
+
+VERI_YOLU = "data/bank-additional-full.csv"
 
 def veri_yukle():
-    """Veri setini okuyup DataFrame olarak dondurur."""
-    # TODO: veri seti secilince doldurulacak (ornek: pd.read_csv(URL))
-    raise NotImplementedError("veri_yukle() henuz yazilmadi")
+    """Ham veriyi yukler. Hedef sutun yes=1, no=0 olarak kodlanir."""
 
+    if os.path.exists(VERI_YOLU):
+        df = pd.read_csv(VERI_YOLU, sep=';')
+    else:
+        raise FileNotFoundError(
+            f"Veri seti bulunamadi: {VERI_YOLU}"
+        )
 
+    df[HEDEF_SUTUN] = df[HEDEF_SUTUN].map({
+        "yes": 1,
+        "no": 0
+    })
+
+    return df
 def veriyi_bol(df):
     """Veriyi her zaman ayni sekilde egitim ve test olarak boler."""
-    X = df.drop(columns=[HEDEF_SUTUN])
+    X = df.drop(columns=[HEDEF_SUTUN,"duration"])#duration sutunu hedefi etkiledigi icin cikarildi
     y = df[HEDEF_SUTUN]
     return train_test_split(
         X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE

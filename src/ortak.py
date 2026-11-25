@@ -10,15 +10,23 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
 
-# ortak.py'nin import kismina ekle:
+# Ortak on isleme bilesenleri
 from .preprocessing import create_preprocessor, prepare_unknown_values
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
+CV_SPLITS = 5
 HEDEF_SUTUN = "y"
 VERI_YOLU = "data/bank-additional-full.csv"
+ORTAK_SKORLAR = {
+    "accuracy": "accuracy",
+    "precision": "precision",
+    "recall": "recall",
+    "f1": "f1",
+    "roc_auc": "roc_auc",
+}
 
 
 def _bul_veri_yolu():
@@ -78,6 +86,61 @@ def veriyi_bol(df):
 def on_isleyici():
     """Ortak ColumnTransformer'i dondurur."""
     return create_preprocessor()
+
+
+def ortak_cv(n_splits=CV_SPLITS, random_state=RANDOM_STATE):
+    """
+    Tum modellerin ortak kullanacagi 5 katli tabakali capraz dogrulama (StratifiedKFold) nesnesini dondurur.
+
+    Kurallar:
+    - n_splits=5, shuffle=True, random_state=42 sabitleri tum modellerde aynidir.
+    - Yalnizca egitim verisi (X_train, y_train) uzerinde kullanilir; test seti dahil edilmez.
+    - Pipeline ile birlikte kullanildiginda on isleme her fold icinde yalnizca ilgili egitim fold'unda fit edilir.
+    """
+    return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+
+def capraz_dogrula(pipeline, X_train, y_train, cv=None, scoring=None, n_jobs=-1):
+    """
+    Verilen ortak Pipeline'i yalnizca egitim verisi uzerinde 5 katli capraz dogrulama ile degerlendirir.
+
+    Test seti (X_test, y_test) bu fonksiyona kesinlikle verilmemelidir.
+    Her fold icinde on isleme (ve varsa SMOTE) yalnizca ilgili egitim katinda fit edilir.
+
+    Parametreler:
+        pipeline: Scikit-learn veya imblearn Pipeline nesnesi.
+        X_train: Egitim ozellik matrisi.
+        y_train: Egitim hedef degiskeni (0/1).
+        cv: Opsiyonel capraz dogrulama bolucusu (varsayilan: ortak_cv()).
+        scoring: Opsiyonel skor sozlugu (varsayilan: ORTAK_SKORLAR).
+        n_jobs: Paralel islem sayisi (varsayilan: -1).
+
+    Donus:
+        dict: Her metrik icin 'ortalama', 'std' ve 'kat_skorlari' degerlerini iceren sozluk.
+    """
+    if cv is None:
+        cv = ortak_cv()
+    if scoring is None:
+        scoring = ORTAK_SKORLAR
+
+    cv_sonuc = cross_validate(
+        pipeline,
+        X_train,
+        y_train,
+        cv=cv,
+        scoring=scoring,
+        n_jobs=n_jobs,
+    )
+
+    ozet = {}
+    for metrik in scoring:
+        skorlar = cv_sonuc[f"test_{metrik}"]
+        ozet[metrik] = {
+            "ortalama": float(np.mean(skorlar)),
+            "std": float(np.std(skorlar)),
+            "kat_skorlari": [float(s) for s in skorlar],
+        }
+    return ozet
 
 
 def degerlendir(model, X_test, y_test, model_adi, klasor="results"):

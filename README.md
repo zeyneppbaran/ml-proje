@@ -7,7 +7,7 @@
 | Kişi | Ad Soyad | Öğrenci No | Ortak paket | Model |
 |---|---|---|---|---|
 | 1 | | | Veri seti tanıtımı + özellik mühendisliği/seçimi | SVM |
-| 2 | | | Keşif analizi ve grafikler | XGBoost |
+| 2 | Aybüke Gökçe Yavaş | B221210371 | Keşif analizi ve grafikler | XGBoost |
 | 3 | | | Ön işleme ve ortak pipeline | Lojistik Regresyon |
 | 4 | Zeynep Baran | B231210029 | Açıklanabilir yapay zeka (SHAP) | Random Forest |
 | 5 | | | Dengeleme (SMOTE) + karşılaştırma ve sonuç | KNN |

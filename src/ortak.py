@@ -16,7 +16,10 @@ from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_
 from .preprocessing import create_preprocessor, prepare_unknown_values
 
 RANDOM_STATE = 42
-TEST_SIZE = 0.2
+TRAIN_SIZE = 0.70
+VAL_SIZE = 0.15
+TEST_SIZE = 0.15
+TEMP_SIZE = 0.30
 CV_SPLITS = 5
 HEDEF_SUTUN = "y"
 VERI_YOLU = "data/bank-additional-full.csv"
@@ -43,22 +46,32 @@ def _bul_veri_yolu():
 
 
 def veri_yukle(veri_yolu=None):
-    """Ham veriyi yukler. Hedef sutun yes=1, no=0 olarak kodlanir."""
+    """Ham veriyi yukler, duration henuz varken gercek tekrarlari siler ve ortak donusumleri uygular.
+
+    Hedef sutun yes=1, no=0 olarak kodlanir.
+    """
     if veri_yolu is None:
         veri_yolu = _bul_veri_yolu()
 
     if not os.path.exists(veri_yolu):
         raise FileNotFoundError(f"Veri seti bulunamadi: {veri_yolu}")
 
-    # Veri setini noktali virgul ayiricisiyla oku
+    # Veri setini noktali virgul ayiricisiyla oku ve duration henuz mevcutken gercek tekrarlari sil
     df = pd.read_csv(veri_yolu, sep=';')
+    df = df.drop_duplicates().reset_index(drop=True).copy()
 
-    # 'unknown' -> NaN (eklendi)
+    # Dusuk oranli kategorik sutunlarda 'unknown' -> NaN (default korunur)
     df = prepare_unknown_values(df)
 
-    # pdays ozel kodu cozumleme: 999 degeri sayisal bir buyukluk degil, ozel koddur!
-    df["daha_once_aranmis"] = (df["pdays"] != 999).astype(int)
-    df["pdays"] = df["pdays"].replace(999, -1)
+    # Daha once aranma bilgisi (onceki kampanyalarda en az 1 temas yapilmis mi?)
+    df["daha_once_aranmis"] = (df["previous"] > 0).astype(int)
+
+    # Son aramadan bu yana gecen gun bilgisinin kayitli olup olmadigi (pdays != 999)
+    df["pdays_kayitli"] = (df["pdays"] != 999).astype(int)
+
+    # 999 gercek bir gun sayisi degildir; NaN yapilir ve ortak Pipeline icindeki
+    # SimpleImputer(strategy='median') yalnizca egitim katindan ogrenerek doldurur.
+    df["pdays"] = df["pdays"].replace(999, np.nan)
 
     # Hedef sutun yes=1, no=0 olarak kodlanir
     df[HEDEF_SUTUN] = df[HEDEF_SUTUN].map({"yes": 1, "no": 0})
@@ -67,20 +80,40 @@ def veri_yukle(veri_yolu=None):
 
 def veriyi_bol(df):
     """
-    Veriyi her zaman ayni sekilde egitim ve test olarak boler.
-    
+    Veriyi her zaman ayni sekilde %70 Egitim, %15 Dogrulama (Validation) ve %15 Test olarak boler.
+
     ONEMLI (VERI SIZINTISI / DATA LEAKAGE ONLEMI):
-    'duration' (gorusme suresi) sutunu modelden kesinlikle cikarilmistir!
-    Gerekce: Bir arama gerceklesmeden once telefon gorusmesinin kac saniye surecegi bilinemez.
-    Arama bittiginde ise musterinin vadeli mevduat acip acmadigi zaten bellidir.
-    Bu sutunun modele verilmesi yapay olarak yuksek basari uretir ancak sahada calismaz;
-    yani dogrudan bir Veri Sizintisi (Data Leakage) olusturur.
+    - 'duration' (gorusme suresi) sutunu modelden kesinlikle cikarilmistir.
+      Gerekce: Bir arama gerceklesmeden once telefon gorusmesinin kac saniye surecegi bilinemez.
+      Arama bittiginde ise musterinin vadeli mevduat acip acmadigi zaten bellidir.
+    - On isleme (imputer, scaler, encoder) ve SMOTE yalnizca X_train uzerinden ogrenilmelidir.
+    - X_val model secimi ve hiperparametre dogrulamasinda, X_test yalnizca nihai degerlendirmede kullanilir.
+
+    Donus:
+        tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
     """
     X = df.drop(columns=[HEDEF_SUTUN, "duration"])
     y = df[HEDEF_SUTUN]
-    return train_test_split(
-        X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE
+
+    # 1. Asama: %70 Egitim, %30 Gecici (Validation + Test)
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X,
+        y,
+        test_size=TEMP_SIZE,
+        stratify=y,
+        random_state=RANDOM_STATE,
     )
+
+    # 2. Asama: Kalan %30'u %15 Validation ve %15 Test olarak esit bol
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp,
+        y_temp,
+        test_size=0.50,
+        stratify=y_temp,
+        random_state=RANDOM_STATE,
+    )
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
 
 
 def on_isleyici():
@@ -94,7 +127,7 @@ def ortak_cv(n_splits=CV_SPLITS, random_state=RANDOM_STATE):
 
     Kurallar:
     - n_splits=5, shuffle=True, random_state=42 sabitleri tum modellerde aynidir.
-    - Yalnizca egitim verisi (X_train, y_train) uzerinde kullanilir; test seti dahil edilmez.
+    - Yalnizca egitim verisi (X_train, y_train) uzerinde kullanilir; validation ve test setleri dahil edilmez.
     - Pipeline ile birlikte kullanildiginda on isleme her fold icinde yalnizca ilgili egitim fold'unda fit edilir.
     """
     return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
@@ -104,7 +137,7 @@ def capraz_dogrula(pipeline, X_train, y_train, cv=None, scoring=None, n_jobs=-1)
     """
     Verilen ortak Pipeline'i yalnizca egitim verisi uzerinde 5 katli capraz dogrulama ile degerlendirir.
 
-    Test seti (X_test, y_test) bu fonksiyona kesinlikle verilmemelidir.
+    Validation (X_val, y_val) ve test (X_test, y_test) setleri bu fonksiyona verilmemelidir.
     Her fold icinde on isleme (ve varsa SMOTE) yalnizca ilgili egitim katinda fit edilir.
 
     Parametreler:

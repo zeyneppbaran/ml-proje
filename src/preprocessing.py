@@ -10,12 +10,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
-# Sayisal sutunlar (pdays ozel kodu ve yeni turetilen daha_once_aranmis dahil)
+# Sayisal sutunlar (pdays ozel kodu ve yeni turetilen daha_once_aranmis, pdays_kayitli dahil)
 numeric_features = [
     'age', 'campaign', 'pdays', 'previous',
     'emp.var.rate', 'cons.price.idx', 'cons.conf.idx',
     'euribor3m', 'nr.employed',
-    'daha_once_aranmis'  # yeni sutun
+    'daha_once_aranmis',
+    'pdays_kayitli'
 ]
 
 # En sik gorulen degerle (mode / most_frequent) doldurulacak kategorik sutunlar (Eksik orani < %5)
